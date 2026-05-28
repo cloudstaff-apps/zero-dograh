@@ -32,9 +32,11 @@ class ServiceProviders(str, Enum):
     ASSEMBLYAI = "assemblyai"
     GLADIA = "gladia"
     RIME = "rime"
+    XAI = "xai"
     OPENAI_REALTIME = "openai_realtime"
     GOOGLE_REALTIME = "google_realtime"
     GOOGLE_VERTEX_REALTIME = "google_vertex_realtime"
+    XAI_REALTIME = "xai_realtime"
 
 
 class BaseServiceConfiguration(BaseModel):
@@ -55,6 +57,8 @@ class BaseServiceConfiguration(BaseModel):
         ServiceProviders.OPENAI_REALTIME,
         ServiceProviders.GOOGLE_REALTIME,
         ServiceProviders.GOOGLE_VERTEX_REALTIME,
+        ServiceProviders.XAI,
+        ServiceProviders.XAI_REALTIME,
         # ServiceProviders.SARVAM,
     ]
     api_key: str | list[str]
@@ -200,6 +204,23 @@ AWS_BEDROCK_MODELS = [
     "us.anthropic.claude-3-5-sonnet-20241022-v2:0",
     "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 ]
+XAI_LLM_MODELS = [
+    "grok-3",
+    "grok-3-fast",
+    "grok-3-mini",
+    "grok-3-mini-fast",
+    "grok-4.20-non-reasoning",
+]
+
+
+@register_llm
+class XAILLMConfiguration(BaseLLMConfiguration):
+    provider: Literal[ServiceProviders.XAI] = ServiceProviders.XAI
+    model: str = Field(
+        default="grok-3-fast",
+        description="xAI Grok chat model.",
+        json_schema_extra={"examples": XAI_LLM_MODELS, "allow_custom_input": True},
+    )
 
 
 @register_llm
@@ -477,10 +498,36 @@ class GoogleVertexRealtimeLLMConfiguration(BaseLLMConfiguration):
     )
 
 
+XAI_REALTIME_MODELS = ["grok-voice-latest", "grok-voice-think-fast-1.0"]
+XAI_REALTIME_VOICES = ["eve", "ara", "rex", "sal", "leo"]
+
+
+@register_service(ServiceType.REALTIME)
+class XAIRealtimeLLMConfiguration(BaseLLMConfiguration):
+    provider: Literal[ServiceProviders.XAI_REALTIME] = ServiceProviders.XAI_REALTIME
+    model: str = Field(
+        default="grok-voice-latest",
+        description="xAI Grok Realtime voice agent model.",
+        json_schema_extra={
+            "examples": XAI_REALTIME_MODELS,
+            "allow_custom_input": True,
+        },
+    )
+    voice: str = Field(
+        default="eve",
+        description="Voice the model speaks in.",
+        json_schema_extra={
+            "examples": XAI_REALTIME_VOICES,
+            "allow_custom_input": True,
+        },
+    )
+
+
 REALTIME_PROVIDERS = {
     ServiceProviders.OPENAI_REALTIME.value,
     ServiceProviders.GOOGLE_REALTIME.value,
     ServiceProviders.GOOGLE_VERTEX_REALTIME.value,
+    ServiceProviders.XAI_REALTIME.value,
 }
 
 
@@ -494,6 +541,7 @@ LLMConfig = Annotated[
         DograhLLMService,
         AWSBedrockLLMConfiguration,
         SpeachesLLMConfiguration,
+        XAILLMConfiguration,
     ],
     Field(discriminator="provider"),
 ]
@@ -503,6 +551,7 @@ RealtimeConfig = Annotated[
         OpenAIRealtimeLLMConfiguration,
         GoogleRealtimeLLMConfiguration,
         GoogleVertexRealtimeLLMConfiguration,
+        XAIRealtimeLLMConfiguration,
     ],
     Field(discriminator="provider"),
 ]
@@ -783,6 +832,30 @@ class SpeachesTTSConfiguration(BaseTTSConfiguration):
     )
 
 
+XAI_TTS_VOICES = ["eve", "ara", "rex", "sal", "leo"]
+
+
+@register_tts
+class XAITTSConfiguration(BaseTTSConfiguration):
+    provider: Literal[ServiceProviders.XAI] = ServiceProviders.XAI
+    model: str = Field(
+        default="default",
+        description="xAI TTS model (not currently user-selectable).",
+    )
+    voice: str = Field(
+        default="eve",
+        description="xAI voice name.",
+        json_schema_extra={
+            "examples": XAI_TTS_VOICES,
+            "allow_custom_input": True,
+        },
+    )
+    language: str = Field(
+        default="en",
+        description="ISO 639-1 language code.",
+    )
+
+
 TTSConfig = Annotated[
     Union[
         DeepgramTTSConfiguration,
@@ -794,6 +867,7 @@ TTSConfig = Annotated[
         CambTTSConfiguration,
         RimeTTSConfiguration,
         SpeachesTTSConfiguration,
+        XAITTSConfiguration,
     ],
     Field(discriminator="provider"),
 ]
@@ -1228,6 +1302,46 @@ class GladiaSTTConfiguration(BaseSTTConfiguration):
     )
 
 
+XAI_STT_LANGUAGES = [
+    "en",
+    "ar",
+    "bn",
+    "de",
+    "es",
+    "fr",
+    "hi",
+    "id",
+    "it",
+    "ja",
+    "ko",
+    "nl",
+    "pl",
+    "pt",
+    "ru",
+    "sv",
+    "tr",
+    "vi",
+    "zh",
+]
+
+
+@register_stt
+class XAISTTConfiguration(BaseSTTConfiguration):
+    provider: Literal[ServiceProviders.XAI] = ServiceProviders.XAI
+    model: str = Field(
+        default="default",
+        description="xAI STT model (not currently user-selectable).",
+    )
+    language: str = Field(
+        default="en",
+        description="ISO 639-1 language code.",
+        json_schema_extra={
+            "examples": XAI_STT_LANGUAGES,
+            "allow_custom_input": True,
+        },
+    )
+
+
 STTConfig = Annotated[
     Union[
         DeepgramSTTConfiguration,
@@ -1239,6 +1353,7 @@ STTConfig = Annotated[
         SpeachesSTTConfiguration,
         AssemblyAISTTConfiguration,
         GladiaSTTConfiguration,
+        XAISTTConfiguration,
     ],
     Field(discriminator="provider"),
 ]

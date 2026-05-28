@@ -38,6 +38,9 @@ from pipecat.services.openrouter.llm import OpenRouterLLMService, OpenRouterLLMS
 from pipecat.services.rime.tts import RimeTTSService, RimeTTSSettings
 from pipecat.services.sarvam.stt import SarvamSTTService, SarvamSTTSettings
 from pipecat.services.sarvam.tts import SarvamTTSService, SarvamTTSSettings
+from pipecat.services.xai.llm import GrokLLMService, GrokLLMSettings
+from pipecat.services.xai.stt import XAISTTService, XAISTTSettings
+from pipecat.services.xai.tts import XAITTSService, XAIWebsocketTTSSettings
 from pipecat.services.speaches.llm import SpeachesLLMService, SpeachesLLMSettings
 from pipecat.services.speaches.stt import SpeachesSTTService, SpeachesSTTSettings
 from pipecat.services.speaches.tts import SpeachesTTSService, SpeachesTTSSettings
@@ -206,6 +209,38 @@ def create_stt_service(
                 additional_vocab=additional_vocab,
             ),
             sample_rate=audio_config.transport_in_sample_rate,
+        )
+    elif user_config.stt.provider == ServiceProviders.XAI.value:
+        xai_stt_language_mapping = {
+            "en": Language.EN,
+            "ar": Language.AR,
+            "bn": Language.BN,
+            "de": Language.DE,
+            "es": Language.ES,
+            "fr": Language.FR,
+            "hi": Language.HI,
+            "id": Language.ID,
+            "it": Language.IT,
+            "ja": Language.JA,
+            "ko": Language.KO,
+            "nl": Language.NL,
+            "pl": Language.PL,
+            "pt": Language.PT,
+            "ru": Language.RU,
+            "sv": Language.SV,
+            "tr": Language.TR,
+            "vi": Language.VI,
+            "zh": Language.ZH,
+        }
+        language = getattr(user_config.stt, "language", None) or "en"
+        pipecat_language = xai_stt_language_mapping.get(language, Language.EN)
+        return XAISTTService(
+            api_key=user_config.stt.api_key,
+            sample_rate=audio_config.transport_in_sample_rate,
+            settings=XAISTTSettings(
+                language=pipecat_language,
+                interim_results=True,
+            ),
         )
     else:
         raise HTTPException(
@@ -392,6 +427,39 @@ def create_tts_service(user_config, audio_config: "AudioConfig"):
             skip_aggregator_types=["recording_router", "recording"],
             silence_time_s=1.0,
         )
+    elif user_config.tts.provider == ServiceProviders.XAI.value:
+        language_code = getattr(user_config.tts, "language", None) or "en"
+        xai_language_mapping = {
+            "en": Language.EN,
+            "es": Language.ES,
+            "fr": Language.FR,
+            "de": Language.DE,
+            "it": Language.IT,
+            "pt": Language.PT,
+            "nl": Language.NL,
+            "ja": Language.JA,
+            "ko": Language.KO,
+            "zh": Language.ZH,
+            "ru": Language.RU,
+            "ar": Language.AR,
+            "hi": Language.HI,
+            "tr": Language.TR,
+            "vi": Language.VI,
+            "id": Language.ID,
+            "pl": Language.PL,
+            "sv": Language.SV,
+        }
+        pipecat_language = xai_language_mapping.get(language_code, Language.EN)
+        return XAITTSService(
+            api_key=user_config.tts.api_key,
+            settings=XAIWebsocketTTSSettings(
+                voice=user_config.tts.voice,
+                language=pipecat_language,
+            ),
+            text_filters=[xml_function_tag_filter],
+            skip_aggregator_types=["recording_router", "recording"],
+            silence_time_s=1.0,
+        )
     else:
         raise HTTPException(
             status_code=400, detail=f"Invalid TTS provider {user_config.tts.provider}"
@@ -470,6 +538,11 @@ def create_llm_service_from_provider(
             base_url=base_url or "http://localhost:11434/v1",
             api_key=api_key or "none",
             settings=SpeachesLLMSettings(model=model),
+        )
+    elif provider == ServiceProviders.XAI.value:
+        return GrokLLMService(
+            api_key=api_key,
+            settings=GrokLLMSettings(model=model, temperature=0.1),
         )
     else:
         raise HTTPException(status_code=400, detail=f"Invalid LLM provider {provider}")
@@ -557,6 +630,21 @@ def create_realtime_llm_service(user_config, audio_config: "AudioConfig"):
             project_id=project_id,
             location=location,
             settings=DograhGeminiLiveVertexLLMService.Settings(**settings_kwargs),
+        )
+    elif provider == ServiceProviders.XAI_REALTIME.value:
+        from api.services.pipecat.realtime.grok_realtime import (
+            DograhGrokRealtimeLLMService,
+        )
+        from pipecat.services.xai.realtime import events as grok_events
+
+        return DograhGrokRealtimeLLMService(
+            api_key=api_key,
+            settings=DograhGrokRealtimeLLMService.Settings(
+                model=model,
+                session_properties=grok_events.SessionProperties(
+                    voice=voice or "eve",
+                ),
+            ),
         )
     else:
         raise HTTPException(
