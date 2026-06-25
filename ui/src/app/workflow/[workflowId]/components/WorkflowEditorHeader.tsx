@@ -2,6 +2,8 @@
 
 import { ReactFlowInstance } from "@xyflow/react";
 import { AlertCircle, ArrowLeft, Bot, ChevronDown, Clipboard, Copy, Download, Eye, History, LoaderCircle, Menu, MoreVertical, Pencil, Phone, Rocket } from "lucide-react";
+import posthog from "posthog-js";
+import { PostHogEvent } from "@/constants/posthog-events";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -405,7 +407,7 @@ export const WorkflowEditorHeader = ({
                                         workflow_id: workflowId,
                                         workflow_name: workflowName,
                                     });
-                                    onRun(WORKFLOW_RUN_MODES.SMALL_WEBRTC);
+                                    onTestAgentClick();
                                 }}
                                 className="text-foreground hover:bg-accent cursor-pointer"
                             >
