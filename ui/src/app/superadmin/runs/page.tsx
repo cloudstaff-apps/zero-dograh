@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from '@/lib/auth';
+import { formatDateTime } from '@/lib/dateTime';
 import{ superadminFilterAttributes } from "@/lib/filterAttributes";
 import { decodeFiltersFromURL, encodeFiltersToURL } from '@/lib/filters';
 import { impersonateAsSuperadmin } from '@/lib/utils';
@@ -248,8 +249,6 @@ export default function RunsPage() {
      * ----------------------------------------------------------------------------------
      */
 
-    const formatDate = (dateString: string) => new Date(dateString).toLocaleString();
-
     const calculateDuration = (isCompleted: boolean, usageInfo?: Record<string, unknown>) => {
         if (isCompleted && typeof usageInfo?.call_duration_seconds === 'number') {
             return `${Number(usageInfo.call_duration_seconds).toFixed(2)}s`;
@@ -440,6 +439,19 @@ export default function RunsPage() {
                                                     </TableCell>
                                                     <TableCell className="text-sm">
                                                         <div className="flex items-center space-x-1">
+                                                            {run.initial_context && (
+                                                                <Tooltip>
+                                                                    <TooltipTrigger asChild>
+                                                                        <Info className="h-4 w-4 text-green-600 cursor-pointer" />
+                                                                    </TooltipTrigger>
+                                                                    <TooltipContent sideOffset={4} className="max-w-sm whitespace-pre-wrap break-words">
+                                                                        <p className="font-semibold text-xs mb-1">Initial Context</p>
+                                                                        <pre className="max-w-sm whitespace-pre-wrap break-words text-xs">
+                                                                            {JSON.stringify(run.initial_context, null, 2)}
+                                                                        </pre>
+                                                                    </TooltipContent>
+                                                                </Tooltip>
+                                                            )}
                                                             {run.gathered_context && (
                                                                 <Tooltip>
                                                                     <TooltipTrigger asChild>
@@ -466,13 +478,13 @@ export default function RunsPage() {
                                                                     </TooltipContent>
                                                                 </Tooltip>
                                                             )}
-                                                            {!run.gathered_context && !run.usage_info && (
+                                                            {!run.initial_context && !run.gathered_context && !run.usage_info && (
                                                                 <span className="text-muted-foreground">-</span>
                                                             )}
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="text-sm">
-                                                        {formatDate(run.created_at)}
+                                                        {formatDateTime(run.created_at)}
                                                     </TableCell>
                                                     <TableCell>
                                                         <div className="flex space-x-2">
@@ -493,7 +505,7 @@ export default function RunsPage() {
                                                                                 {
                                                                                     field: 'extra.run_id',
                                                                                     op: '==',
-                                                                                    value: run.id,
+                                                                                    value: String(run.id),
                                                                                 },
                                                                             ],
                                                                             field: '',
