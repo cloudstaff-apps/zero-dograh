@@ -6,7 +6,7 @@ from typing import Optional
 import redis.asyncio as aioredis
 from loguru import logger
 
-from api.constants import REDIS_URL
+from api.constants import MAX_CALL_DURATION_SECONDS, REDIS_URL
 
 # Fleet-wide mirror of every live slot ("<org_id>:<slot_id>", scored by acquire
 # time), maintained by the acquire/release paths alongside the per-org sets so
@@ -27,7 +27,10 @@ class RateLimiter:
 
     def __init__(self):
         self.redis_client: Optional[aioredis.Redis] = None
-        self.stale_call_timeout = 1200  # 20 minutes in seconds
+        # A slot older than the longest possible call belongs to a call that
+        # never released it; sharing the configurable ceiling keeps the two in
+        # lockstep (see MAX_CALL_DURATION_SECONDS in api/constants.py).
+        self.stale_call_timeout = MAX_CALL_DURATION_SECONDS
 
     async def _get_redis(self) -> aioredis.Redis:
         """Get or create Redis connection"""

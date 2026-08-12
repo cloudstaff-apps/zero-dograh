@@ -230,6 +230,13 @@ TEXT_CHAT_INACTIVITY_SWEEP_MAX_PAGES = 10
 TEXT_CHAT_INACTIVITY_SWEEP_ENQUEUE_LIMIT = 500
 
 
+# Hard ceiling on the per-workflow max_call_duration setting. This same value
+# is used as the concurrency rate limiter's stale-call timeout, so the two can
+# never drift apart: a call is only considered stale (and its concurrency slot
+# reclaimed) once it could no longer be legitimately running.
+MAX_CALL_DURATION_SECONDS = int(os.getenv("MAX_CALL_DURATION_SECONDS", "1200"))
+
+
 # Circuit breaker defaults for campaign call failure detection
 DEFAULT_CIRCUIT_BREAKER_CONFIG = {
     "enabled": True,

@@ -10,16 +10,13 @@ from pydantic import (
 )
 
 from api.constants import (
+    MAX_CALL_DURATION_SECONDS,
     MAX_TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS,
     MIN_TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS,
     TEXT_CHAT_INACTIVITY_TIMEOUT_SECONDS,
 )
 
 DEFAULT_MAX_CALL_DURATION_SECONDS = 300
-# Hard ceiling on configurable call duration. Must stay <= the concurrency
-# rate limiter's stale_call_timeout (20 min): a call running past that has
-# its slot purged as stale and the org concurrency limit under-counts.
-MAX_CALL_DURATION_SECONDS = 1200
 DEFAULT_MAX_USER_IDLE_TIMEOUT_SECONDS = 10.0
 DEFAULT_SMART_TURN_STOP_SECS = 2.0
 DEFAULT_TURN_START_STRATEGY = "default"
