@@ -26,7 +26,7 @@ from loguru import logger
 
 from api.constants import REDIS_URL
 from api.db import db_client
-from api.enums import CallType, WorkflowRunMode
+from api.enums import CallType, WorkflowRunMode, WorkflowRunState
 from api.errors.failure import (
     DograhFailure,
     ErrorSource,
@@ -585,6 +585,19 @@ class ARIConnection:
                         transfer_id, channel_id, failure_message
                     )
                 )
+            else:
+                # Non-transfer channel destroyed with no disposition set:
+                # finalize it so it doesn't stay stale. try/except: a raise
+                # here would drop the ARI WebSocket.
+                try:
+                    await self._finalize_unconnected_channel(
+                        channel_id, cause, tech_cause, cause_txt
+                    )
+                except Exception as e:
+                    logger.warning(
+                        f"[ARI org={self.organization_id}] Failed to finalize "
+                        f"unconnected channel {channel_id}: {e}"
+                    )
 
         elif event_type == "ChannelDtmfReceived":
             digit = event.get("digit", "")
@@ -1256,6 +1269,81 @@ class ARIConnection:
             return "The transfer call failed to connect. There may be a network issue or the number is unavailable."
         else:
             return f"Transfer failed: {cause_txt}"
+
+    def _map_hangup_cause_to_disposition(
+        self, cause: int, tech_cause: str, cause_txt: str
+    ) -> str:
+        """Map a hangup (Q.850 cause, or SIP tech_cause when cause is the
+        generic 127) to a Telnyx-style disposition."""
+        sip = str(tech_cause or "")
+        # Busy / declined
+        if cause == 17 or sip in ("486", "600", "603"):
+            return "busy"
+        # No answer / unavailable
+        if cause in (18, 19, 20) or sip in ("408", "480"):
+            return "no-answer"
+        # Cancelled / request terminated before answer
+        if sip == "487":
+            return "canceled"
+        # Normal clearing before the pipeline ever ran = caller/callee gave up
+        if cause == 16:
+            return "no-answer"
+        # Everything else (rejects, congestion, 5xx, generic 127) is a failure
+        return "failed"
+
+    async def _finalize_unconnected_channel(
+        self, channel_id: str, cause: int, tech_cause: str, cause_txt: str
+    ) -> None:
+        """Finalize a run whose channel was destroyed before it connected
+        (no answer / busy / trunk error): set a disposition and free the slot.
+        Correlates by call_id; only touches runs still INITIALIZED.
+        """
+        run = await db_client.get_workflow_run_by_call_id(channel_id)
+        if not run:
+            # Fallback to the Redis channel->run mapping (set at StasisStart).
+            mapped = await self._get_channel_run(channel_id)
+            if not mapped:
+                return
+            try:
+                run = await db_client.get_workflow_run_by_id(int(mapped))
+            except (TypeError, ValueError):
+                return
+        if not run:
+            return
+
+        # Skip connected calls (RUNNING — the pipeline records their own
+        # disposition on teardown) and anything already finalized.
+        if run.is_completed or run.state != WorkflowRunState.INITIALIZED.value:
+            return
+        existing_ctx = run.gathered_context or {}
+        if existing_ctx.get("call_disposition"):
+            return
+
+        disposition = self._map_hangup_cause_to_disposition(
+            cause, tech_cause, cause_txt
+        )
+        call_tags = list(existing_ctx.get("call_tags", []))
+        for tag in ("not_connected", f"telephony_{disposition}"):
+            if tag not in call_tags:
+                call_tags.append(tag)
+
+        await db_client.update_workflow_run(
+            run_id=run.id,
+            is_completed=True,
+            state=WorkflowRunState.COMPLETED.value,
+            gathered_context={
+                "call_tags": call_tags,
+                "call_disposition": disposition,
+                "mapped_call_disposition": disposition,
+            },
+        )
+        # Idempotent — no-op if StasisEnd/pipeline teardown already released it.
+        await call_concurrency.unregister_active_call(run.id)
+        logger.info(
+            f"[ARI org={self.organization_id}] Finalized unconnected run "
+            f"{run.id} on ChannelDestroyed: disposition={disposition} "
+            f"(cause={cause}, tech_cause={tech_cause})"
+        )
 
     def _get_transfer_id(self, app_args: list) -> Optional[str]:
         """Get transfer_id if this is a transfer channel, None otherwise.
