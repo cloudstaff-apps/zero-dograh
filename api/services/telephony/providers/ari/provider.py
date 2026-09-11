@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import aiohttp
+import redis.asyncio as aioredis
 from fastapi import HTTPException
 from loguru import logger
 from pipecat.utils.enums import EndTaskReason
@@ -149,6 +150,29 @@ class ARIProvider(TelephonyProvider):
                     f"[ARI] Channel created: {channel_id} "
                     f"state={response_data.get('state')}"
                 )
+
+                # Register channel->run in Redis at originate time so a
+                # ChannelDestroyed that fires before call_id is persisted (an
+                # instant trunk reject, e.g. 503 congestion on a batch of
+                # triggers) can still be correlated and finalized. Uses the same
+                # ari:channel:<id> map ari_manager reads (_get_channel_run);
+                # without this those runs get no disposition and leak a slot.
+                if channel_id and workflow_run_id is not None:
+                    try:
+                        from api.constants import REDIS_URL
+
+                        _r = aioredis.from_url(REDIS_URL, decode_responses=True)
+                        await _r.set(
+                            f"ari:channel:{channel_id}",
+                            str(workflow_run_id),
+                            ex=3600,
+                        )
+                        await _r.aclose()
+                    except Exception as e:
+                        logger.warning(
+                            f"[ARI] Failed to pre-register channel->run for "
+                            f"{channel_id}: {e}"
+                        )
 
                 return CallInitiationResult(
                     call_id=channel_id,
